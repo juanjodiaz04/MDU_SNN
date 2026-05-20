@@ -1,7 +1,6 @@
 import logging
 from bclef_DL import ClefUnifiedDL
-from spikerplus import NetBuilder, Trainer, VhdlGenerator
-from spikerplus.vhdl import write_vhdl
+from spikerplus import NetBuilder, Trainer
 
 
 logging.basicConfig(level=logging.INFO)
@@ -42,22 +41,11 @@ def main():
         }
     }
 
-    bit_width_config = {
-        "weights_bw": 8,
-        "neurons_bw": 16,
-        "fp_dec": 6
-        }
-
     net_builder = NetBuilder(net_dict)
     snn = net_builder.build()
     trainer = Trainer(snn)
 
     trainer.train(train_loader,test_loader,n_epochs=20, store = True)
-
-    # VHDL Generation
-    # vhdl_generator = VhdlGenerator(snn, bit_width_config)
-    # vhdl_snn = vhdl_generator.generate()
-    # write_vhdl(vhdl_snn, output_dir="SpikerAudio")
 
 if __name__ == "__main__":
     main()
