@@ -52,7 +52,7 @@ def main():
     snn = net_builder.build()
     trainer = Trainer(snn)
 
-    trainer.train(train_loader,test_loader,n_epochs=10, store = True)
+    trainer.train(train_loader,test_loader,n_epochs=20, store = True)
 
     # VHDL Generation
     # vhdl_generator = VhdlGenerator(snn, bit_width_config)
