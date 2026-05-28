@@ -10,7 +10,7 @@ batch_size = 64
 
 def main():
     
-    data_loader = ClefUnifiedDL(data_dir=data_dir, encoding_type="sf", spiking_thresh=0.2, bipolar=False)
+    data_loader = ClefUnifiedDL(data_dir=data_dir, encoding_type="simple", spiking_thresh=0.2, bipolar=False)
     train_loader, test_loader = data_loader.load(batch_size=64)
 
     # Extract number of timesteps and inputs
@@ -45,7 +45,7 @@ def main():
     snn = net_builder.build()
     trainer = Trainer(snn)
 
-    trainer.train(train_loader,test_loader,n_epochs=20, store = True)
+    trainer.train(train_loader,test_loader,n_epochs=40, store = True)
 
 if __name__ == "__main__":
     main()

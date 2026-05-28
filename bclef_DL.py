@@ -124,7 +124,7 @@ class BCDataset(Dataset):
                     if self.transform:
                         waveform = self.transform(waveform)
 
-                    self.samples.append((waveform, label))
+                    self.samples.append((waveform.to(torch.bool), label))
 
     def __len__(self):
         return len(self.samples)
@@ -132,7 +132,8 @@ class BCDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-        return self.samples[idx]
+        spikes, label = self.samples[idx]
+        return spikes.float(), label
 
 
 class UnifiedSpikeTransform:
