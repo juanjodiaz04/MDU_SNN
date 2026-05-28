@@ -67,22 +67,19 @@ class ClefUnifiedDL:
               f"across {n_species} species.")
 
     def load(self, batch_size=16, train_shuffle=True, test_shuffle=False,
-             drop_last=True, num_workers=None):
-
-        if num_workers is None:
-            num_workers = self.num_cpu_cores
+        drop_last=True):
 
         train_loader = DataLoader(self.train_set,
             batch_size  = batch_size,
             shuffle     = train_shuffle,
-            num_workers = num_workers,
+            num_workers = 0,  # No parallel
             drop_last   = drop_last
         )
 
         test_loader = DataLoader(self.test_set,
             batch_size  = batch_size,
             shuffle     = test_shuffle,
-            num_workers = num_workers,
+            num_workers = 0,
             drop_last   = drop_last
         )
 
@@ -93,7 +90,6 @@ class BCDataset(Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir   = root_dir
         self.transform  = transform
-        self.data       = []
         self.max_length = 160_000 # 5s @ 32kHz
 
         species = sorted([
@@ -103,42 +99,40 @@ class BCDataset(Dataset):
         self.label_map = {name: idx for idx, name in enumerate(species)}
         print(f"Found {len(species)} species: {self.label_map}")
 
+        # Pre-encode everything into RAM
+        self.samples = []
         for species_name, label in self.label_map.items():
             species_path = os.path.join(root_dir, species_name)
             for file_name in sorted(os.listdir(species_path)):
                 if file_name.endswith(".ogg"):
-                    self.data.append((os.path.join(species_path, file_name), label))
+                    waveform, sample_rate = torchaudio.load(os.path.join(species_path, file_name))
+
+                    # Convert to mono if stereo
+                    if waveform.size(0) > 1:
+                        waveform = waveform.mean(dim=0, keepdim=True)
+
+                    # Resample if needed
+                    if sample_rate != 32000:
+                        waveform = torchaudio.functional.resample(waveform, sample_rate, 32000)
+
+                    # Pad or truncate to exactly 5s @ 32kHz
+                    if waveform.size(1) > self.max_length:
+                        waveform = waveform[:, :self.max_length]
+                    elif waveform.size(1) < self.max_length:
+                        waveform = fn.pad(waveform, (0, self.max_length - waveform.size(1)))
+
+                    if self.transform:
+                        waveform = self.transform(waveform)
+
+                    self.samples.append((waveform, label))
 
     def __len__(self):
-        return len(self.data)
+        return len(self.samples)
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
-
-        file_path, label = self.data[idx]
-        waveform, sample_rate = torchaudio.load(file_path)
-
-        # Convert to mono if stereo
-        if waveform.size(0) > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
-
-        # Resample if needed
-        if sample_rate != 32000:
-            waveform = torchaudio.functional.resample(waveform, sample_rate, 32000)
-
-        # Pad or truncate to exactly 5s @ 32kHz
-        if waveform.size(1) > self.max_length:
-            waveform = waveform[:, :self.max_length]
-        elif waveform.size(1) < self.max_length:
-            pad_size = self.max_length - waveform.size(1)
-            waveform = fn.pad(waveform, (0, pad_size))
-
-        if self.transform:
-            waveform = self.transform(waveform)
-
-        # Output: [T, n_mels] (or [T, n_mels * 2] if using 'sf' or 'mw') — time-first for SNN compatibility
-        return waveform, label
+        return self.samples[idx]
 
 
 class UnifiedSpikeTransform:
