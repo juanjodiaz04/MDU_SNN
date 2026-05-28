@@ -5,12 +5,12 @@ from spikerplus import NetBuilder, Trainer
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = "../Birds_Balanced"
+data_dir = "../Birds_Split"
 batch_size = 64
 
 def main():
     
-    data_loader = ClefUnifiedDL(data_dir=data_dir, encoding_type="sf", spiking_thresh=0.2)
+    data_loader = ClefUnifiedDL(data_dir=data_dir, encoding_type="sf", spiking_thresh=0.2, bipolar=True)
     train_loader, test_loader = data_loader.load(batch_size=64)
 
     # Extract number of timesteps and inputs

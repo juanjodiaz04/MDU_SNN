@@ -22,7 +22,8 @@ class ClefUnifiedDL:
         poisson_interval = 4,        # used for poisson
         train_size       = 0.8,
         random_state     = 42,       # for reproducibility
-        transform        = "default"
+        transform        = "default",
+        bipolar          = True     # whether to use bipolar encoding 
     ):
         self.sample_rate      = 32e3 # 32kHz as per recordings
         self.encoding_type    = encoding_type.lower()
@@ -43,36 +44,27 @@ class ClefUnifiedDL:
                 n_mels           = n_channels,
                 spiking_thresh   = spiking_thresh,
                 window_length    = window_length,
-                poisson_interval = poisson_interval
+                poisson_interval = poisson_interval,
+                bipolar          = bipolar
             )
         else:
             self.transform = transform
 
-        self.dataset = BCDataset(
-            root_dir  = data_dir,
+        self.train_set = BCDataset(
+            root_dir  = os.path.join(data_dir, "train"),
+            transform = self.transform
+        )
+        
+        self.test_set = BCDataset(
+            root_dir  = os.path.join(data_dir, "test"),
             transform = self.transform
         )
 
-        # --- Stratified train/test split ---
-        labels = [label for _, label in self.dataset.data]
-
-        train_idx, test_idx = train_test_split(
-            range(len(self.dataset)),
-            test_size    = 1 - train_size,
-            stratify     = labels,
-            random_state = self.random_state
-        )
-
-        self.train_set = Subset(self.dataset, train_idx)
-        self.test_set  = Subset(self.dataset, test_idx)
-
         # Report split to user
-        n_species = len(self.dataset.label_map)
-        n_train_per_class = int(len(self.dataset) * train_size / n_species)
-        n_test_per_class  = int(len(self.dataset) * (1 - train_size) / n_species)
+        n_species = len(self.train_set.label_map)
         print(f"Loaded '{self.encoding_type}' encoding pipeline.")
-        print(f"Split: {len(self.train_set)} train / {len(self.test_set)} test "
-              f"({n_train_per_class} / {n_test_per_class} per species)")
+        print(f"Loaded {len(self.train_set)} train / {len(self.test_set)} test samples "
+              f"across {n_species} species.")
 
     def load(self, batch_size=16, train_shuffle=True, test_shuffle=False,
              drop_last=True, num_workers=None):
@@ -145,20 +137,21 @@ class BCDataset(Dataset):
         if self.transform:
             waveform = self.transform(waveform)
 
-        # Output: [T, n_mels] — time-first for SNN compatibility
+        # Output: [T, n_mels] (or [T, n_mels * 2] if using 'sf' or 'mw') — time-first for SNN compatibility
         return waveform, label
 
 
 class UnifiedSpikeTransform:
     def __init__(self, encoding_type="simple", sample_rate=32e3, fft_window=25e-3,
                  hop_length_s=15e-3, n_mels=64, spiking_thresh=0.2, window_length=10, 
-                 poisson_interval=4):
+                 poisson_interval=4, bipolar=True):
         
         self.encoding_type    = encoding_type
         self.sample_rate      = int(sample_rate)
         self.n_fft            = int(fft_window * sample_rate)
         self.hop_length       = int(hop_length_s * sample_rate)
         self.n_mels           = n_mels
+        self.bipolar          = bipolar
         
         # Encoding-specific hyperparams
         self.spiking_thresh   = spiking_thresh
@@ -203,12 +196,26 @@ class UnifiedSpikeTransform:
         # Convert to numpy for spikify library tools
         mel_np = mel_spec.squeeze(0).permute(1, 0).numpy()
 
-        if self.encoding_type == "mw":
-            spikes, _ = moving_window(mel_np, self.window_length, self.spiking_thresh)
-            return torch.tensor(spikes, dtype=torch.float32)
+        if self.encoding_type == "mw" or self.encoding_type == "sf":
+        
+            if self.encoding_type == "mw":
+                raw_spikes, _ = moving_window(mel_np, self.window_length, self.spiking_thresh)
 
-        elif self.encoding_type == "sf":
-            spikes, _ = step_forward(mel_np, threshold=self.spiking_thresh)
-            return torch.tensor(spikes, dtype=torch.float32)
+            else: # step forward
+                raw_spikes, _ = step_forward(mel_np, threshold=self.spiking_thresh)
+            
+            spikes_tensor = torch.tensor(raw_spikes, dtype=torch.float32)
+                
+            pos_spikes = (spikes_tensor == 1.0).float()
+            neg_spikes = (spikes_tensor == -1.0).float()
+            
+            if self.bipolar:
+                return torch.tensor(raw_spikes, dtype=torch.float32)
+                
+            else:
+                # Concatenate along the final dimension (n_mels)
+                # Resulting shape turns from [T, n_mels] into [T, n_mels * 2]
+                return torch.cat((pos_spikes, neg_spikes), dim=-1)
+                
 
         raise ValueError("Invalid encoding type processed.")
