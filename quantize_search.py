@@ -9,7 +9,7 @@ from optuna_optimizer import Optimizer_Opt
 
 logging.basicConfig(level=logging.INFO)
 
-data_dir = "../Birds_Balanced"
+data_dir = "../Birds_Split"
 snn_state_dict = "Trained/trained_state_dict.pt"
 batch_size = 64
 
@@ -79,7 +79,12 @@ def main():
     opt.optimize(test_loader)
 
     # VHDL Generation
-    # vhdl_generator = VhdlGenerator(snn, bit_width_config)
+    # optim_config = {
+	# "weights_bw"	: 4,
+	# "neurons_bw"	: 6,
+	# "fp_dec"		: 4
+    # }
+    # vhdl_generator = VhdlGenerator(snn, optim_config)
     # vhdl_snn = vhdl_generator.generate()
     # write_vhdl(vhdl_snn, output_dir="SpikerAudio")
 
