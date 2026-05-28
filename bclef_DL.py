@@ -23,7 +23,7 @@ class ClefUnifiedDL:
         train_size       = 0.8,
         random_state     = 42,       # for reproducibility
         transform        = "default",
-        bipolar          = True     # whether to use bipolar encoding 
+        bipolar          = False    # whether to use bipolar encoding 
     ):
         self.sample_rate      = 32e3 # 32kHz as per recordings
         self.encoding_type    = encoding_type.lower()
@@ -144,7 +144,7 @@ class BCDataset(Dataset):
 class UnifiedSpikeTransform:
     def __init__(self, encoding_type="simple", sample_rate=32e3, fft_window=25e-3,
                  hop_length_s=15e-3, n_mels=64, spiking_thresh=0.2, window_length=10, 
-                 poisson_interval=4, bipolar=True):
+                 poisson_interval=4, bipolar=False):
         
         self.encoding_type    = encoding_type
         self.sample_rate      = int(sample_rate)
